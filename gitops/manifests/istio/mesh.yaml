@@ -1,0 +1,39 @@
+# Mesh-wide defaults. A PeerAuthentication in the Istio root namespace applies
+# to every injected workload; namespaces may relax it locally (the correlator
+# does, for webhooks from outside the mesh).
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: mesh-tracing
+  namespace: istio-system
+spec:
+  tracing:
+    - providers:
+        - name: otel-tracing
+      randomSamplingPercentage: 100
+---
+# Shared edge. Workloads attach VirtualServices with
+# `gateways: [istio-ingress/platform]`; served at http://localhost:8080.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: platform
+  namespace: istio-ingress
+spec:
+  selector:
+    istio: ingress
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts: ["*"]

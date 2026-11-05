@@ -1,0 +1,32 @@
+# Sidecar mode. Spans go to the in-cluster OTel Collector, which fans out to
+# Jaeger - gives traces even for workloads with no OTel SDK wiring.
+pilot:
+  cni:
+    enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  autoscaleEnabled: false
+meshConfig:
+  accessLogFile: /dev/stdout
+  accessLogEncoding: JSON
+  enableTracing: true
+  defaultConfig:
+    holdApplicationUntilProxyStarts: true
+  extensionProviders:
+    - name: otel-tracing
+      opentelemetry:
+        service: otel-collector.observability.svc.cluster.local
+        port: 4317
+        resource_detectors:
+          environment: {}
+global:
+  proxy:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi

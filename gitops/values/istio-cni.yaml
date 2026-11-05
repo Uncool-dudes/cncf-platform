@@ -1,0 +1,14 @@
+# Istio CNI moves traffic redirection out of the privileged istio-init
+# container, so injected workload pods pass the Gatekeeper non-root/no-privilege
+# constraints. Chained after Cilium (cni.exclusive=false in cilium-values).
+cni:
+  chained: true
+  cniBinDir: /opt/cni/bin
+  cniConfDir: /etc/cni/net.d
+  excludeNamespaces:
+    - kube-system
+    - istio-system
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi

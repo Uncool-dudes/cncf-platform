@@ -1,0 +1,20 @@
+service:
+  type: NodePort
+  ports:
+    - name: http2
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+autoscaling:
+  enabled: false
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+# kind maps host 8080 -> node 30080 on the control-plane only.
+nodeSelector:
+  ingress-ready: "true"
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
