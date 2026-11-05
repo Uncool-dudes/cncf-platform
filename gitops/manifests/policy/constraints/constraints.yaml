@@ -41,5 +41,6 @@ spec:
         platform.cncf/workload: "true"
   parameters:
     repos:
-      - "docker.io/istio/"
+      # Injected sidecars; the default hub of the Istio 1.30 charts.
+      - "registry.istio.io/release/"
       - "platform/"
