@@ -71,7 +71,9 @@ notifications:
   triggers:
     trigger.on-sync-done: |
       - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded']
-        oncePer: app.status.operationState.syncResult.revision
+        # Once per sync, not per revision: a re-sync of the same commit
+        # (parameter change, manual sync, rollback) still changes what runs.
+        oncePer: app.status.operationState.finishedAt
         send: [correlator-sync]
   subscriptions:
     # Every Application reports to the correlator without per-app annotations.
