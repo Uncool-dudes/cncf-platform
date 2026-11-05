@@ -1,5 +1,5 @@
-# Sidecar mode. Spans go to the in-cluster OTel Collector, which fans out to
-# Jaeger - gives traces even for workloads with no OTel SDK wiring.
+# Sidecar mode. Spans go to the platform's OTel Collector, which forwards to
+# the trace backend - gives traces even for workloads with no OTel SDK wiring.
 pilot:
   cni:
     enabled: true

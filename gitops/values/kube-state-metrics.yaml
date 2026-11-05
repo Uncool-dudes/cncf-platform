@@ -1,0 +1,8 @@
+# Scraped through its Service's prometheus.io annotation (chart default).
+prometheusScrape: true
+resources:
+  requests:
+    cpu: 20m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

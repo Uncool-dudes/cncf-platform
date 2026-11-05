@@ -1,0 +1,135 @@
+# Demo backend: grafana/otel-lgtm bundles Prometheus, Tempo, Loki, Pyroscope
+# and Grafana in one pod with linked datasources (uids prometheus, tempo,
+# loki). Its upstream marks it for development, demo and testing only; data
+# lives in an emptyDir and is lost on restart.
+#
+# Nothing sends to it directly: workloads and Envoy speak OTLP to the
+# platform's OpenTelemetry Collector, which forwards here. A production
+# cluster swaps this backend by changing the collector's exporter.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lgtm
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: lgtm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lgtm
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lgtm
+    spec:
+      containers:
+        - name: lgtm
+          image: grafana/otel-lgtm:0.39.0
+          env:
+            # The image defaults to anonymous Admin; require the generated login.
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: /otel-lgtm/grafana/conf/provisioning/dashboards/custom/platform-unified.json
+          ports:
+            - name: grafana
+              containerPort: 3000
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: tempo
+              containerPort: 3200
+            - name: prometheus
+              containerPort: 9090
+            - name: loki
+              containerPort: 3100
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: grafana
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: grafana
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 300m
+              memory: 1Gi
+            limits:
+              memory: 3Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            # subPath keeps the image's own dashboard providers visible.
+            - name: dashboard-provider
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/custom.yaml
+              subPath: custom.yaml
+            - name: dashboards
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 8Gi
+        - name: dashboard-provider
+          configMap:
+            name: lgtm-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: platform-dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lgtm-dashboard-provider
+  namespace: observability
+data:
+  custom.yaml: |
+    apiVersion: 1
+    providers:
+      - name: platform
+        type: file
+        disableDeletion: true
+        options:
+          path: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
+          foldersFromFilesStructure: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lgtm
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: lgtm
+spec:
+  selector:
+    app.kubernetes.io/name: lgtm
+  ports:
+    - name: grafana
+      port: 3000
+    - name: otlp-grpc
+      port: 4317
+    - name: otlp-http
+      port: 4318
+    - name: tempo
+      port: 3200
+    - name: prometheus
+      port: 9090
+    - name: loki
+      port: 3100

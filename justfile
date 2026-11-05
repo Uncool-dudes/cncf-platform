@@ -31,8 +31,8 @@ correlator-image:
     docker build -q -f correlator/Dockerfile -t platform/correlator:0.1.0 .build >/dev/null
     kind load docker-image --name {{cluster}} platform/correlator:0.1.0
 
-# One random Grafana admin password, shared with the correlator (which writes
-# annotations). Kept if it already exists.
+# One random Grafana admin password for otel-lgtm, shared with the correlator
+# (which writes annotations). Kept if it already exists.
 grafana-secret:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -66,12 +66,11 @@ argocd:
 
 # Port-forward every UI to localhost.
 ui:
-    @echo "argocd :8081  grafana :3000  jaeger :16686  hubble :12000  falco :2802  mailpit :8025  correlator :8090"
+    @echo "argocd :8081  grafana :3000  hubble :12000  falco :2802  mailpit :8025  correlator :8090"
     @echo "grafana admin password: $(kubectl -n observability get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d)"
     trap 'kill 0' EXIT; \
     kubectl -n argocd port-forward svc/argocd-server 8081:80 & \
-    kubectl -n observability port-forward svc/kps-grafana 3000:80 & \
-    kubectl -n observability port-forward svc/jaeger 16686:16686 & \
+    kubectl -n observability port-forward svc/lgtm 3000:3000 & \
     kubectl -n kube-system port-forward svc/hubble-ui 12000:80 & \
     kubectl -n falco port-forward svc/falco-falcosidekick-ui 2802:2802 & \
     kubectl -n mail port-forward svc/mailpit 8025:8025 & \

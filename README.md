@@ -1,9 +1,9 @@
 # cncf-platform
 
-A local Kubernetes platform built from CNCF graduated projects. It covers
-observability, GitOps and security posture, plus a **correlator** that joins
-runtime security alerts with GitOps deploys and distributed traces. That
-correlator addresses the cross-tool integration gap from
+A local Kubernetes platform for observability, GitOps and security posture,
+built around CNCF projects, plus a **correlator** that joins runtime
+security alerts with GitOps deploys and distributed traces. That correlator
+addresses the cross-tool integration gap from
 `Literature_Review_K8s_CNCF.typ`.
 
 The platform is workload-agnostic. Any app opts in with a namespace label.
@@ -12,7 +12,7 @@ The platform is workload-agnostic. Any app opts in with a namespace label.
 |---|---|---|
 | Network / CNI | Cilium 1.20 + Hubble (L3/L4 policy) | `cluster/cilium-values.yaml`, `gitops/manifests/network` |
 | Service mesh | Istio 1.30 sidecars + CNI, mesh-wide STRICT mTLS | `gitops/values/istio*.yaml`, `gitops/manifests/istio` |
-| Observability | Prometheus, Grafana, OpenTelemetry Collector, Jaeger v2 | `gitops/values/{kube-prometheus-stack,otel-collector,jaeger}.yaml`, `gitops/manifests/observability` |
+| Observability | OpenTelemetry Collector (the seam) into otel-lgtm (Prometheus, Tempo, Loki, Grafana) as the demo backend; kube-state-metrics | `gitops/values/{otel-collector,kube-state-metrics}.yaml`, `gitops/manifests/observability` |
 | GitOps | Argo CD app-of-apps, sync notifications | `gitops/root.yaml`, `gitops/apps`, `gitops/values/argocd.yaml` |
 | Admission policy | OPA Gatekeeper: resources, restricted pod security, allowed repos | `gitops/manifests/policy` |
 | Runtime security | Falco (modern eBPF, k8smeta) + Falcosidekick | `gitops/values/falco.yaml` |
@@ -20,7 +20,9 @@ The platform is workload-agnostic. Any app opts in with a namespace label.
 
 ## Data flow
 
-- Workloads emit OTLP to `otel-collector.observability:4317`. Envoy also emits a span for every hop, so uninstrumented services still show up in traces. The collector exports traces to Jaeger and metrics to Prometheus.
+- Workloads emit OTLP (traces, metrics, logs) to `otel-collector.observability:4317`. Envoy also emits a span for every hop, so uninstrumented services still show up in traces.
+- The collector also scrapes Prometheus endpoints that opt in with `prometheus.io/scrape|port|path` annotations on the pod or its Service (never both), plus cAdvisor. This replaces the Prometheus Operator.
+- The collector forwards everything over OTLP to the backend. Here that's [otel-lgtm](https://github.com/grafana/docker-otel-lgtm), a single-pod Prometheus, Tempo, Loki and Grafana bundle that its upstream marks for demo and testing; data is lost on restart. A production cluster replaces it by changing the collector's exporter (e.g. to a vendor OTLP endpoint). No workload changes are needed.
 - Argo CD notifications POST every successful sync to the correlator.
 - Falcosidekick POSTs every Falco alert to the correlator. The correlator:
   1. attributes the alert to a workload (namespace plus Deployment)
@@ -51,6 +53,7 @@ The platform needs nothing from a workload except this contract.
 3. **Label each Deployment's pods** with `app.kubernetes.io/name: <deployment-name>`, so `just attack` and the correlator resolve the workload.
 4. **Optional:**
    - Send OTLP to `otel-collector.observability.svc.cluster.local:4317`.
+   - Expose Prometheus metrics with `prometheus.io/scrape: "true"` plus `port` and `path` annotations on the pod or its Service.
    - Route edge traffic with a VirtualService on `gateways: [istio-ingress/platform]`, served at `http://localhost:8080`.
    - SMTP goes to `mailpit.mail.svc.cluster.local:1025`.
 5. **Extra egress** (a database, an external API on a port other than 443) goes in the workload's own `CiliumNetworkPolicy`. Cilium allow-lists are additive.
@@ -71,5 +74,5 @@ just bench <label> <targets.json>  # k6 from inside the mesh; results in bench/r
 ## Limitations
 
 - The Gatekeeper templates don't inspect `spec.ephemeralContainers`, so `kubectl debug` bypasses admission policy. Falco still sees it, which is what `just attack` demonstrates.
-- Jaeger stores traces in memory, so restarting it clears history.
+- otel-lgtm keeps all telemetry in an `emptyDir`, so restarting it clears history.
 - Cilium enforces L3/L4 only. Running L7 policy in both Cilium and Istio causes split-brain, per Cilium's Istio guide.

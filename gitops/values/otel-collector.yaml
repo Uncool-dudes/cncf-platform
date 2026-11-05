@@ -1,3 +1,12 @@
+# The platform's telemetry seam. Workloads and Envoy send OTLP here; the
+# collector enriches with Kubernetes metadata and forwards to the backend
+# (otel-lgtm in this cluster). Swapping backends means changing the
+# exporter, nothing upstream.
+#
+# It also scrapes Prometheus endpoints, replacing the Prometheus Operator:
+# a pod or Service opts in with the conventional annotations
+#   prometheus.io/scrape: "true", prometheus.io/port, prometheus.io/path
+# on either the pod or its Service, never both (both would be scraped).
 fullnameOverride: otel-collector
 mode: deployment
 replicaCount: 1
@@ -6,22 +15,26 @@ image:
 presets:
   kubernetesAttributes:
     enabled: true
+clusterRole:
+  create: true
+  rules:
+    # Service discovery for the scrape jobs below.
+    - apiGroups: [""]
+      resources: [pods, services, endpoints, nodes]
+      verbs: [get, list, watch]
+    - apiGroups: [discovery.k8s.io]
+      resources: [endpointslices]
+      verbs: [get, list, watch]
+    # cAdvisor via the API-server node proxy.
+    - apiGroups: [""]
+      resources: [nodes/proxy, nodes/metrics]
+      verbs: [get]
 resources:
   requests:
     cpu: 100m
     memory: 256Mi
   limits:
     memory: 512Mi
-ports:
-  prom-metrics:
-    enabled: true
-    containerPort: 8889
-    servicePort: 8889
-    protocol: TCP
-serviceMonitor:
-  enabled: true
-  metricsEndpoints:
-    - port: prom-metrics
 config:
   receivers:
     otlp:
@@ -30,6 +43,75 @@ config:
           endpoint: ${env:MY_POD_IP}:4317
         http:
           endpoint: ${env:MY_POD_IP}:4318
+    prometheus:
+      config:
+        scrape_configs:
+          - job_name: kubernetes-pods
+            scrape_interval: 15s
+            kubernetes_sd_configs:
+              - role: pod
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                action: keep
+                regex: "true"
+              - source_labels: [__meta_kubernetes_pod_phase]
+                action: drop
+                regex: Pending|Succeeded|Failed
+              - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                action: replace
+                regex: (.+)
+                target_label: __metrics_path__
+              # One target per pod: every container port collapses onto the
+              # annotated port.
+              - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                action: replace
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: $$1:$$2
+                target_label: __address__
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+              - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+                target_label: app
+          - job_name: kubernetes-services
+            scrape_interval: 15s
+            kubernetes_sd_configs:
+              - role: endpointslice
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+                action: keep
+                regex: "true"
+              - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+                action: replace
+                regex: (.+)
+                target_label: __metrics_path__
+              - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+                action: replace
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: $$1:$$2
+                target_label: __address__
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_service_name]
+                target_label: service
+          # Per-container CPU/memory (container_* series) for the dashboard.
+          - job_name: cadvisor
+            scrape_interval: 30s
+            scheme: https
+            tls_config:
+              ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            authorization:
+              credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+            kubernetes_sd_configs:
+              - role: node
+            relabel_configs:
+              - target_label: __address__
+                replacement: kubernetes.default.svc:443
+              - source_labels: [__meta_kubernetes_node_name]
+                regex: (.+)
+                target_label: __metrics_path__
+                replacement: /api/v1/nodes/$$1/proxy/metrics/cadvisor
   processors:
     memory_limiter:
       check_interval: 1s
@@ -37,28 +119,28 @@ config:
       spike_limit_percentage: 20
     batch: {}
   exporters:
-    otlp/jaeger:
-      endpoint: jaeger.observability.svc:4317
+    otlp/lgtm:
+      endpoint: lgtm.observability.svc:4317
       tls:
         insecure: true
-    prometheus:
-      endpoint: 0.0.0.0:8889
-      resource_to_telemetry_conversion:
-        enabled: true
-    # No log backend in this stack; keep logs visible in collector output only.
-    debug:
-      verbosity: basic
   service:
     pipelines:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, batch]
-        exporters: [otlp/jaeger]
+        exporters: [otlp/lgtm]
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, batch]
-        exporters: [prometheus]
+        exporters: [otlp/lgtm]
+      # Scraped series already carry namespace/pod target labels; the
+      # connection-based k8sattributes association would attribute them all
+      # to the collector itself.
+      metrics/scraped:
+        receivers: [prometheus]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/lgtm]
       logs:
         receivers: [otlp]
-        processors: [memory_limiter, batch]
-        exporters: [debug]
+        processors: [memory_limiter, k8sattributes, batch]
+        exporters: [otlp/lgtm]

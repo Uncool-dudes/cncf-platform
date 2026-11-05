@@ -12,9 +12,13 @@ falco:
 falcosidekick:
   enabled: true
   replicaCount: 1
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "2801"
+    prometheus.io/path: /metrics
   config:
     # Every alert is pushed to the correlator, which joins it with ArgoCD
-    # deploy events and Jaeger traces for the same workload.
+    # deploy events and traces for the same workload.
     webhook:
       address: http://correlator.correlator.svc:8080/v1/falco
       minimumpriority: notice

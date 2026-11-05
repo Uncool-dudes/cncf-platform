@@ -54,19 +54,16 @@ spec:
         - ports:
             - port: "15012"
               protocol: TCP
-    # OTLP to the collector; the correlator queries Jaeger and Grafana.
+    # OTLP to the platform collector only - never straight to the backend.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: opentelemetry-collector
       toPorts:
         - ports:
             - port: "4317"
               protocol: TCP
             - port: "4318"
-              protocol: TCP
-            - port: "16686"
-              protocol: TCP
-            - port: "3000"
               protocol: TCP
     # Mail sink for any workload that sends SMTP.
     - toEndpoints:

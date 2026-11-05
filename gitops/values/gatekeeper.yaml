@@ -18,3 +18,7 @@ controllerManager:
     requests:
       cpu: 50m
       memory: 128Mi
+# Scraped by the platform collector (gitops/values/otel-collector.yaml).
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8888"

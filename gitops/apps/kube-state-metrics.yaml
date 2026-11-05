@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: jaeger
+  name: kube-state-metrics
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "1"
@@ -13,13 +13,13 @@ spec:
     server: https://kubernetes.default.svc
     namespace: observability
   sources:
-    - repoURL: https://jaegertracing.github.io/helm-charts
-      chart: jaeger
-      targetRevision: 4.16.1
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-state-metrics
+      targetRevision: 9.0.0
       helm:
-        releaseName: jaeger
+        releaseName: kube-state-metrics
         valueFiles:
-          - $values/gitops/values/jaeger.yaml
+          - $values/gitops/values/kube-state-metrics.yaml
     - repoURL: https://github.com/uncool-dudes/cncf-platform.git
       targetRevision: main
       ref: values

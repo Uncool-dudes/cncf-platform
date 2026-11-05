@@ -38,11 +38,12 @@ subjects:
     name: correlator
     namespace: correlator
 ---
-# The workload baseline allows no API-server egress; only the correlator needs it.
+# Egress beyond the workload baseline that only the correlator needs: the
+# API server (Argo CD history), Tempo search and Grafana annotations.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: correlator-apiserver
+  name: correlator-egress
   namespace: correlator
 spec:
   endpointSelector:
@@ -50,6 +51,16 @@ spec:
       app.kubernetes.io/name: correlator
   egress:
     - toEntities: [kube-apiserver]
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: lgtm
+      toPorts:
+        - ports:
+            - port: "3200"
+              protocol: TCP
+            - port: "3000"
+              protocol: TCP
 ---
 apiVersion: v1
 kind: Service
@@ -84,6 +95,10 @@ spec:
         app.kubernetes.io/name: correlator
         app: correlator
         version: "0.1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: /metrics
     spec:
       serviceAccountName: correlator
       securityContext:
@@ -120,19 +135,6 @@ spec:
             runAsNonRoot: true
             capabilities:
               drop: [ALL]
----
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: correlator
-  namespace: correlator
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: correlator
-  endpoints:
-    - port: http
-      path: /metrics
 ---
 # Webhooks arrive from Falcosidekick and Argo CD, which are outside the mesh;
 # accept plaintext from them while mesh peers still use mTLS.
