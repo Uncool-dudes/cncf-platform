@@ -1,0 +1,53 @@
+driver:
+  kind: modern_ebpf
+tty: true
+collectors:
+  kubernetes:
+    enabled: true
+falco:
+  json_output: true
+  json_include_output_property: true
+  http_output:
+    enabled: false
+falcosidekick:
+  enabled: true
+  replicaCount: 1
+  config:
+    # Every alert is pushed to the correlator, which joins it with ArgoCD
+    # deploy events and Jaeger traces for the same workload.
+    webhook:
+      address: http://correlator.correlator.svc:8080/v1/falco
+      minimumpriority: notice
+  webui:
+    enabled: true
+    replicaCount: 1
+    redis:
+      storageEnabled: false
+customRules:
+  # Workloads opt in by namespace label (platform.cncf/workload=true), read via
+  # the k8smeta plugin - no rule edits per workload.
+  platform-rules.yaml: |-
+    - macro: platform_workload
+      condition: k8smeta.ns.label[platform.cncf/workload] = "true"
+    - rule: Shell spawned in platform workload
+      desc: >
+        Workload images should not need an interactive shell; one appearing is
+        an intrusion or an ad-hoc debug session (kubectl exec/debug).
+      condition: spawned_process and container and platform_workload and proc.name in (shell_binaries)
+      output: >
+        Shell in workload pod (user=%user.name pod=%k8s.pod.name ns=%k8s.ns.name
+        image=%container.image.repository cmd=%proc.cmdline parent=%proc.pname)
+      priority: WARNING
+      tags: [platform, shell, mitre_execution]
+    - rule: Package manager run in platform workload
+      desc: Installing software into a running workload container is configuration drift.
+      condition: spawned_process and container and platform_workload and proc.name in (package_mgmt_binaries)
+      output: >
+        Package manager in workload pod (proc=%proc.name pod=%k8s.pod.name
+        ns=%k8s.ns.name cmd=%proc.cmdline)
+      priority: ERROR
+      tags: [platform, drift]
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
