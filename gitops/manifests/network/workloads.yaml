@@ -1,0 +1,84 @@
+# L3/L4 baseline for every namespace labelled platform.cncf/workload=true.
+# L7 stays with Istio (see cluster/cilium-values.yaml). Cilium policies are
+# additive allow-lists: a workload widens this by shipping its own
+# CiliumNetworkPolicy (e.g. egress to its database) in its namespace.
+# Anything not allowed is dropped and counted in hubble_drop_total.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: workload-baseline
+spec:
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.namespace.labels.platform.cncf/workload: "true"
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.cilium.k8s.namespace.labels.platform.cncf/workload: "true"
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: istio-ingress
+        # In-cluster k6 load generator (just bench).
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: bench
+        # Prometheus scrapes Envoy and workload metrics.
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+    # Falcosidekick and Argo CD notifications deliver webhooks to the correlator.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: falco
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: argocd
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet health probes (rewritten by Istio to 15020).
+    - fromEntities: [host, remote-node]
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.cilium.k8s.namespace.labels.platform.cncf/workload: "true"
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: istio-system
+      toPorts:
+        - ports:
+            - port: "15012"
+              protocol: TCP
+    # OTLP to the collector; the correlator queries Jaeger and Grafana.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP
+            - port: "16686"
+              protocol: TCP
+            - port: "3000"
+              protocol: TCP
+    # Mail sink for any workload that sends SMTP.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: mail
+      toPorts:
+        - ports:
+            - port: "1025"
+              protocol: TCP
+    # Third-party HTTPS APIs only.
+    - toEntities: [world]
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
