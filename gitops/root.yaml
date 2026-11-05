@@ -1,0 +1,21 @@
+# App of apps: the only object applied by hand. Everything else in the
+# cluster (except Cilium, Argo CD itself, and the config Secrets) is
+# reconciled from gitops/apps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  source:
+    repoURL: https://github.com/uncool-dudes/cncf-platform.git
+    targetRevision: main
+    path: gitops/apps
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -11,7 +11,7 @@ cluster := env("KIND_CLUSTER", "platform")
 arch    := `docker info --format '{{.Architecture}}' 2>/dev/null | sed 's/aarch64/arm64/;s/x86_64/amd64/'`
 
 # Full bring-up, in dependency order.
-up: cluster cilium
+up: cluster cilium argocd
 
 # kind cluster with the default CNI disabled.
 cluster:
@@ -24,6 +24,25 @@ cilium:
     helm upgrade --install cilium cilium/cilium --version 1.20.4 \
       -n kube-system -f cluster/cilium-values.yaml --wait
     cilium status --wait
+
+# Install Argo CD once, then hand the cluster to the app-of-apps.
+argocd:
+    helm repo add argo https://argoproj.github.io/argo-helm >/dev/null
+    helm upgrade --install argocd argo/argo-cd --version 10.14.0 \
+      -n argocd --create-namespace -f gitops/values/argocd.yaml --wait
+    # Private-repo access via the local gh token; skipped when gh is not
+    # logged in (a public fork needs no credentials).
+    if gh auth token >/dev/null 2>&1; then \
+      kubectl -n argocd create secret generic repo-cncf-platform \
+        --from-literal=type=git \
+        --from-literal=url=$(yq '.spec.source.repoURL' gitops/root.yaml) \
+        --from-literal=username=x-access-token \
+        --from-literal=password="$(gh auth token)" \
+        --dry-run=client -o yaml \
+        | kubectl label --local -f - argocd.argoproj.io/secret-type=repository -o yaml \
+        | kubectl apply -f - >/dev/null; \
+    fi
+    kubectl apply -f gitops/root.yaml
 
 down:
     kind delete cluster --name {{cluster}}

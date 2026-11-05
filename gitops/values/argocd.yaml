@@ -1,0 +1,48 @@
+# Installed once by `just argocd`, then self-managed via apps/argocd.yaml.
+global:
+  domain: localhost
+configs:
+  params:
+    server.insecure: true
+  cm:
+    timeout.reconciliation: 60s
+    # Argo CD >=1.8 no longer assesses child Application health, so sync waves
+    # in the app-of-apps would not wait for istiod/Gatekeeper before workloads.
+    # Restores it (https://argo-cd.readthedocs.io/en/stable/operator-manual/health/#argocd-app).
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+    # Istio-injected Pods differ from their manifests; never treat that as drift.
+    resource.exclusions: |
+      - apiGroups: ["cilium.io"]
+        kinds: ["CiliumIdentity", "CiliumEndpoint", "CiliumEndpointSlice"]
+        clusters: ["*"]
+controller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+repoServer:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+server:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+dex:
+  enabled: false
+applicationSet:
+  enabled: false
