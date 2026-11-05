@@ -57,7 +57,7 @@ The platform needs nothing from a workload except this contract.
    - Route edge traffic with a VirtualService on `gateways: [istio-ingress/platform]`, served at `http://localhost:8080`.
    - SMTP goes to `mailpit.mail.svc.cluster.local:1025`.
 5. **Extra egress** (a database, an external API on a port other than 443) goes in the workload's own `CiliumNetworkPolicy`. Cilium allow-lists are additive.
-6. **Deploy it with an Argo CD `Application`** pointing at the workload's own repo, applied with `kubectl apply`. Every Application's syncs are reported to the correlator automatically.
+6. **Deploy it with an Argo CD `Application`** pointing at the workload's own repo, applied with `kubectl apply`. Set `spec.destination.namespace` to the workload namespace, even when the manifests set it themselves: the correlator attributes each sync to that namespace, and a sync without one is never matched to an alert.
 
 ## Bring-up
 

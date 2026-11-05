@@ -14,6 +14,8 @@ spec:
     path: examples/podinfo/overlays/default
   destination:
     server: https://kubernetes.default.svc
+    # The correlator attributes a sync to this namespace.
+    namespace: podinfo
   syncPolicy:
     automated:
       prune: true
