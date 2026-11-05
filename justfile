@@ -11,7 +11,7 @@ cluster := env("KIND_CLUSTER", "platform")
 arch    := `docker info --format '{{.Architecture}}' 2>/dev/null | sed 's/aarch64/arm64/;s/x86_64/amd64/'`
 
 # Full bring-up, in dependency order.
-up: cluster cilium grafana-secret argocd
+up: cluster cilium correlator-image grafana-secret argocd
 
 # kind cluster with the default CNI disabled.
 cluster:
@@ -25,13 +25,20 @@ cilium:
       -n kube-system -f cluster/cilium-values.yaml --wait
     cilium status --wait
 
-# One random Grafana admin password. Kept if it already exists.
+correlator-image:
+    mkdir -p .build
+    cd correlator && CGO_ENABLED=0 GOOS=linux GOARCH={{arch}} go build -trimpath -ldflags="-s -w" -o ../.build/correlator ./cmd/correlator
+    docker build -q -f correlator/Dockerfile -t platform/correlator:0.1.0 .build >/dev/null
+    kind load docker-image --name {{cluster}} platform/correlator:0.1.0
+
+# One random Grafana admin password, shared with the correlator (which writes
+# annotations). Kept if it already exists.
 grafana-secret:
     #!/usr/bin/env bash
     set -euo pipefail
     pass=$(kubectl -n observability get secret grafana-admin -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || true)
     pass=${pass:-$(openssl rand -hex 16)}
-    for ns in observability; do
+    for ns in observability correlator; do
       kubectl create namespace $ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null
       kubectl -n $ns create secret generic grafana-admin \
         --from-literal=admin-user=admin --from-literal=admin-password="$pass" \

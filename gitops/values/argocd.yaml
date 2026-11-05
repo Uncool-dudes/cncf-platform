@@ -46,3 +46,36 @@ dex:
   enabled: false
 applicationSet:
   enabled: false
+notifications:
+  enabled: true
+  notifiers:
+    service.webhook.correlator: |
+      url: http://correlator.correlator.svc:8080/v1/argocd
+      headers:
+        - name: Content-Type
+          value: application/json
+  templates:
+    # Body shape is decoded by correlator/argocd; keep the two in sync.
+    template.correlator-sync: |
+      webhook:
+        correlator:
+          method: POST
+          body: |
+            {
+              "app": "{{.app.metadata.name}}",
+              "revision": "{{.app.status.sync.revision}}",
+              "namespace": "{{.app.spec.destination.namespace}}",
+              "phase": "{{.app.status.operationState.phase}}",
+              "finishedAt": "{{.app.status.operationState.finishedAt}}"
+            }
+  triggers:
+    trigger.on-sync-done: |
+      - when: app.status.operationState != nil and app.status.operationState.phase in ['Succeeded']
+        oncePer: app.status.operationState.syncResult.revision
+        send: [correlator-sync]
+  subscriptions:
+    # Every Application reports to the correlator without per-app annotations.
+    - recipients:
+        - correlator
+      triggers:
+        - on-sync-done

@@ -1,0 +1,146 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: correlator
+  labels:
+    istio-injection: enabled
+    platform.cncf/workload: "true"
+---
+# Reads Application sync history at startup to re-seed deployments lost on
+# restart (correlator/argocd/history.go).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: correlator
+  namespace: correlator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: correlator-read-applications
+  namespace: argocd
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [applications]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: correlator-read-applications
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: correlator-read-applications
+subjects:
+  - kind: ServiceAccount
+    name: correlator
+    namespace: correlator
+---
+# The workload baseline allows no API-server egress; only the correlator needs it.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: correlator-apiserver
+  namespace: correlator
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: correlator
+  egress:
+    - toEntities: [kube-apiserver]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: correlator
+  namespace: correlator
+  labels:
+    app.kubernetes.io/name: correlator
+spec:
+  selector:
+    app.kubernetes.io/name: correlator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: correlator
+  namespace: correlator
+  labels:
+    app.kubernetes.io/name: correlator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: correlator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: correlator
+        app: correlator
+        version: "0.1.0"
+    spec:
+      serviceAccountName: correlator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: correlator
+          image: platform/correlator:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: GRAFANA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: correlator
+  namespace: correlator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: correlator
+  endpoints:
+    - port: http
+      path: /metrics
+---
+# Webhooks arrive from Falcosidekick and Argo CD, which are outside the mesh;
+# accept plaintext from them while mesh peers still use mTLS.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: permissive-webhooks
+  namespace: correlator
+spec:
+  mtls:
+    mode: PERMISSIVE
