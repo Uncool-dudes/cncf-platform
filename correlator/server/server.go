@@ -75,16 +75,16 @@ func (s *Server) Handler() http.Handler {
 	s.incidentsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "correlator_incidents_total",
 		Help: "Falco alerts correlated, by workload, rule, priority and whether a GitOps sync preceded them.",
-	}, []string{"namespace", "service", "rule", "priority", "after_deploy"})
+	}, []string{"workload_namespace", "workload", "rule", "priority", "after_deploy"})
 	s.deployToAlert = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "correlator_deploy_to_alert_seconds",
 		Help:    "Time from the last GitOps sync to a security alert in the same namespace.",
 		Buckets: prometheus.ExponentialBuckets(5, 2, 10),
-	}, []string{"namespace", "revision"})
+	}, []string{"workload_namespace", "revision"})
 	s.deploysTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "correlator_deployments_total",
 		Help: "Successful Argo CD syncs received.",
-	}, []string{"app", "namespace"})
+	}, []string{"app", "workload_namespace"})
 	s.registry.MustRegister(s.incidentsTotal, s.deployToAlert, s.deploysTotal)
 
 	mux := http.NewServeMux()
