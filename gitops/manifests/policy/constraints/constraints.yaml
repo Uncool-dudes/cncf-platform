@@ -1,0 +1,45 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredResources
+metadata:
+  name: workloads-must-set-resources
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: [Pod]
+    namespaceSelector:
+      matchLabels:
+        platform.cncf/workload: "true"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sPSPRestricted
+metadata:
+  name: workloads-must-be-restricted
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: [Pod]
+    namespaceSelector:
+      matchLabels:
+        platform.cncf/workload: "true"
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sAllowedRepos
+metadata:
+  name: workloads-from-trusted-repos
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: [Pod]
+    namespaceSelector:
+      matchLabels:
+        platform.cncf/workload: "true"
+  parameters:
+    repos:
+      - "docker.io/istio/"
+      - "platform/"

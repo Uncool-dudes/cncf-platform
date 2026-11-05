@@ -1,0 +1,20 @@
+replicas: 1
+auditInterval: 60
+emitAdmissionEvents: true
+emitAuditEvents: true
+audit:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+controllerManager:
+  # Gatekeeper must never block platform namespaces from healing.
+  exemptNamespaces:
+    - kube-system
+    - gatekeeper-system
+    - argocd
+    - istio-system
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi

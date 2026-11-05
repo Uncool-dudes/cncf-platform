@@ -1,0 +1,57 @@
+# Images must come from a platform-wide allow-list plus any prefixes the
+# workload's namespace declares in its platform.cncf/allowed-repos annotation
+# (comma-separated). Workloads widen their own namespace without editing
+# platform policy; the annotation is read from Gatekeeper's synced inventory
+# (see ../config/sync.yaml).
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedrepos
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRepos
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            repos:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedrepos
+
+        containers[c] { c := input.review.object.spec.containers[_] }
+        containers[c] { c := input.review.object.spec.initContainers[_] }
+
+        namespace_repos[r] {
+          ns := data.inventory.cluster["v1"]["Namespace"][input.review.namespace]
+          raw := ns.metadata.annotations["platform.cncf/allowed-repos"]
+          r := trim_space(split(raw, ",")[_])
+          r != ""
+        }
+
+        allowed[r] { r := input.parameters.repos[_] }
+        allowed[r] { r := namespace_repos[_] }
+
+        violation[{"msg": msg}] {
+          c := containers[_]
+          not startswith_any(c.image)
+          msg := sprintf("container %v image %v not from an allowed repo", [c.name, c.image])
+        }
+        violation[{"msg": msg}] {
+          c := containers[_]
+          endswith(c.image, ":latest")
+          msg := sprintf("container %v uses a :latest tag", [c.name])
+        }
+        violation[{"msg": msg}] {
+          c := containers[_]
+          not contains(c.image, ":")
+          msg := sprintf("container %v image has no tag", [c.name])
+        }
+
+        startswith_any(image) { startswith(image, allowed[_]) }
