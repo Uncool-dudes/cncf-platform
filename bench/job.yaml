@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6
+  namespace: bench
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        # Let the k6 pod exit even though a sidecar is running.
+        proxy.istio.io/config: '{ "holdApplicationUntilProxyStarts": true }'
+        sidecar.istio.io/nativeSidecar: "true"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:1.3.0
+          args: [run, /scripts/health.js]
+          env:
+            - name: LABEL
+              value: __LABEL__
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          projected:
+            sources:
+              - configMap:
+                  name: k6-script
+              - configMap:
+                  name: bench-targets
