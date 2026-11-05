@@ -11,7 +11,7 @@ cluster := env("KIND_CLUSTER", "platform")
 arch    := `docker info --format '{{.Architecture}}' 2>/dev/null | sed 's/aarch64/arm64/;s/x86_64/amd64/'`
 
 # Full bring-up, in dependency order.
-up: cluster cilium argocd
+up: cluster cilium grafana-secret argocd
 
 # kind cluster with the default CNI disabled.
 cluster:
@@ -24,6 +24,19 @@ cilium:
     helm upgrade --install cilium cilium/cilium --version 1.20.4 \
       -n kube-system -f cluster/cilium-values.yaml --wait
     cilium status --wait
+
+# One random Grafana admin password. Kept if it already exists.
+grafana-secret:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pass=$(kubectl -n observability get secret grafana-admin -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || true)
+    pass=${pass:-$(openssl rand -hex 16)}
+    for ns in observability; do
+      kubectl create namespace $ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+      kubectl -n $ns create secret generic grafana-admin \
+        --from-literal=admin-user=admin --from-literal=admin-password="$pass" \
+        --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+    done
 
 # Install Argo CD once, then hand the cluster to the app-of-apps.
 argocd:

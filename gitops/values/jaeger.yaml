@@ -1,0 +1,9 @@
+# Jaeger v2 single binary. No userconfig = chart's built-in all-in-one with the
+# in-memory store: traces are evidence for a demo run, not data to keep.
+jaeger:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
