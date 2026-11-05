@@ -1,0 +1,42 @@
+# Cilium 1.20.4. Istio sidecar coexistence settings per
+# https://docs.cilium.io/en/stable/network/servicemesh/istio/
+image:
+  pullPolicy: IfNotPresent
+ipam:
+  mode: kubernetes
+kubeProxyReplacement: false
+# Socket LB must not rewrite pod-namespace connections, or Istio's iptables
+# redirect never sees the original service VIP.
+socketLB:
+  hostNamespaceOnly: true
+# Istio CNI / init containers chain after Cilium; exclusive mode would delete them.
+cni:
+  exclusive: false
+# L7 is Istio's job: Cilium L7 policy cannot inspect mTLS traffic, and running
+# both causes split-brain (same doc). Cilium enforces L3/L4 only.
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+  metrics:
+    enableOpenMetrics: true
+    enabled:
+      - dns
+      - drop
+      - tcp
+      - flow
+      - "httpV2:exemplars=true;labelsContext=source_namespace,destination_namespace"
+    serviceMonitor:
+      enabled: false
+prometheus:
+  enabled: true
+operator:
+  replicas: 1
+  prometheus:
+    enabled: true
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi

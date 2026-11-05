@@ -1,0 +1,23 @@
+# Cilium replaces kindnet as CNI; kube-proxy is kept (kubeProxyReplacement=false)
+# because Cilium's Istio guide treats KPR as optional and it removes a moving
+# part on Docker Desktop's LinuxKit kernel.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: platform
+networking:
+  disableDefaultCNI: true
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Istio ingress gateway NodePort -> http://localhost:8080
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+  - role: worker
+  - role: worker
