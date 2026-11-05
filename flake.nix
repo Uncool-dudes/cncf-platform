@@ -29,6 +29,8 @@
             yq-go
             just
             go
+            # experiments/analysis/report.py
+            (python3.withPackages (ps: [ ps.pandas ps.matplotlib ps.tabulate ]))
           ];
         };
       });

@@ -129,3 +129,7 @@ correlate *args:
 # Re-score a correlate run under the window grid (no cluster needed).
 replay run:
     cd experiments && go run ./cmd/replay results/{{run}}/trials.jsonl > results/{{run}}/ablation.csv
+
+# Tables and plots for one results run: summary.md next to its CSVs.
+report run:
+    python3 experiments/analysis/report.py experiments/results/{{run}}
