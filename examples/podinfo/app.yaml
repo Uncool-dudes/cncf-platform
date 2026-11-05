@@ -1,0 +1,26 @@
+# Applied with `just podinfo`, not by the platform's app-of-apps: workloads
+# own their Application (README "Plugging in a workload"), and the
+# experiments patch it, which root's self-heal would revert.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: podinfo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/uncool-dudes/cncf-platform.git
+    targetRevision: main
+    path: examples/podinfo/overlays/default
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

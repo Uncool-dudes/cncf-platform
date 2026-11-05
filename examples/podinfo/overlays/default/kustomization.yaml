@@ -1,0 +1,8 @@
+# podinfo opted into the platform per README "Plugging in a workload".
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: podinfo
+resources:
+  - namespace.yaml
+  - ../../base
+  - virtualservice.yaml

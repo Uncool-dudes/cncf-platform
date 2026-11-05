@@ -64,6 +64,10 @@ argocd:
     fi
     kubectl apply -f gitops/root.yaml
 
+# Example workload: two-tier podinfo at http://podinfo.localhost:8080.
+podinfo:
+    kubectl apply -f examples/podinfo/app.yaml
+
 # Port-forward every UI to localhost.
 ui:
     @echo "argocd :8081  grafana :3000  hubble :12000  falco :2802  mailpit :8025  correlator :8090"

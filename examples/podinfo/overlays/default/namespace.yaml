@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: podinfo
+  labels:
+    platform.cncf/workload: "true"
+    istio-injection: enabled
+  annotations:
+    platform.cncf/allowed-repos: ghcr.io/stefanprodan/
