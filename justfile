@@ -113,3 +113,8 @@ bench label targets inject="true" duration="3m" rate="50":
 
 down:
     kind delete cluster --name {{cluster}}
+
+# Platform overhead matrix: every bench/layers layer x Falco on/off, cells
+# shuffled per repetition. Results in experiments/results/<run>-overhead.
+overhead *args:
+    cd experiments && go run ./cmd/overhead {{args}}
