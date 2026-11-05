@@ -36,7 +36,10 @@ type Server struct {
 	Traces    TraceFinder
 	Annotator Annotator
 	Window    incident.Window
-	Log       *slog.Logger
+	// IndexLag is how long the trace backend takes to make a trace
+	// searchable; the post-alert refresh waits TraceSpan + IndexLag.
+	IndexLag time.Duration
+	Log      *slog.Logger
 	// Keep bounds each in-memory history.
 	Keep int
 	// After schedules the post-alert trace refresh; time.AfterFunc when nil.
@@ -118,7 +121,7 @@ func (s *Server) handleArgoCD(w http.ResponseWriter, r *http.Request) {
 
 // handleFalco correlates with the traces available now (the half-window
 // before the alert), then schedules one refresh once the half-window after
-// the alert has elapsed and its traces can exist.
+// the alert has elapsed and its traces have been indexed.
 func (s *Server) handleFalco(w http.ResponseWriter, r *http.Request) {
 	alert, err := falco.Decode(r.Body)
 	if errors.Is(err, incident.ErrUnknownWorkload) {
@@ -139,7 +142,7 @@ func (s *Server) handleFalco(w http.ResponseWriter, r *http.Request) {
 		s.Log.Warn("grafana annotation failed", "err", err)
 	}
 	s.setAnnotationID(id, annotationID)
-	s.after(time.Until(alert.At.Add(s.Window.TraceSpan)), func() { s.refresh(id) })
+	s.after(time.Until(alert.At.Add(s.Window.TraceSpan+s.IndexLag)), func() { s.refresh(id) })
 	w.WriteHeader(http.StatusAccepted)
 }
 

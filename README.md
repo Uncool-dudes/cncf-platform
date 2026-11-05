@@ -16,7 +16,7 @@ The platform is workload-agnostic. Any app opts in with a namespace label.
 | GitOps | Argo CD app-of-apps, sync notifications | `gitops/root.yaml`, `gitops/apps`, `gitops/values/argocd.yaml` |
 | Admission policy | OPA Gatekeeper: resources, restricted pod security, allowed repos | `gitops/manifests/policy` |
 | Runtime security | Falco (modern eBPF, k8smeta) + Falcosidekick | `gitops/values/falco.yaml` |
-| Correlator | Falco alert + last Argo CD sync + Jaeger traces into one incident | `correlator/` |
+| Correlator | Falco alert + last Argo CD sync + Tempo traces into one incident | `correlator/` |
 
 ## Data flow
 
@@ -27,7 +27,7 @@ The platform is workload-agnostic. Any app opts in with a namespace label.
 - Falcosidekick POSTs every Falco alert to the correlator. The correlator:
   1. attributes the alert to a workload (namespace plus Deployment)
   2. finds the latest sync into that namespace (30m lookback)
-  3. fetches the workload's traces (±2m, errors first), then refreshes the incident and its annotation once the +2m half has elapsed
+  3. fetches the workload's traces (±2m, errors first), then refreshes the incident and its annotation once the +2m half has elapsed and been indexed (~45s Tempo lag)
   4. records the incident at `GET /v1/incidents`
   5. exports `correlator_incidents_total` and `correlator_deploy_to_alert_seconds`
   6. writes Grafana annotations that show on the "Platform - unified observability and security" dashboard

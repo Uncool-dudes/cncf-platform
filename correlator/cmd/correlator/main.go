@@ -1,4 +1,4 @@
-// Command correlator joins Falco alerts with Argo CD syncs and Jaeger traces.
+// Command correlator joins Falco alerts with Argo CD syncs and Tempo traces.
 // Configuration is environment-only; see gitops/manifests/correlator.
 package main
 
@@ -12,8 +12,8 @@ import (
 	"github.com/uncool-dudes/cncf-platform/correlator/argocd"
 	"github.com/uncool-dudes/cncf-platform/correlator/grafana"
 	"github.com/uncool-dudes/cncf-platform/correlator/incident"
-	"github.com/uncool-dudes/cncf-platform/correlator/jaeger"
 	"github.com/uncool-dudes/cncf-platform/correlator/server"
+	"github.com/uncool-dudes/cncf-platform/correlator/tempo"
 )
 
 func main() {
@@ -21,16 +21,19 @@ func main() {
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 
 	srv := &server.Server{
-		Traces: jaeger.Client{BaseURL: env("JAEGER_URL", "http://jaeger.observability.svc:16686"), HTTP: httpClient, Limit: 50},
+		Traces: tempo.Client{BaseURL: env("TEMPO_URL", "http://lgtm.observability.svc:3200"), HTTP: httpClient, Limit: 50},
 		Annotator: grafana.Client{
-			BaseURL:  env("GRAFANA_URL", "http://kps-grafana.observability.svc"),
+			BaseURL:  env("GRAFANA_URL", "http://lgtm.observability.svc:3000"),
 			User:     env("GRAFANA_USER", "admin"),
 			Password: os.Getenv("GRAFANA_PASSWORD"),
 			HTTP:     httpClient,
 		},
 		Window: incident.Window{DeployLookback: 30 * time.Minute, TraceSpan: 2 * time.Minute, MaxTraces: 5},
-		Log:    log,
-		Keep:   500,
+		// Tempo needs ~30s before a new trace is searchable (measured on
+		// otel-lgtm 0.39.0); the post-alert refresh waits this long extra.
+		IndexLag: 45 * time.Second,
+		Log:      log,
+		Keep:     500,
 	}
 
 	seedDeployments(srv, log, env("ARGOCD_NAMESPACE", "argocd"))

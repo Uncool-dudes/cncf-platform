@@ -1,6 +1,6 @@
 // Package incident joins the three signals the reviewed literature evaluates
 // in isolation - a runtime security alert (Falco), the GitOps deployment that
-// preceded it (Argo CD), and the request traces around it (Jaeger) - into
+// preceded it (Argo CD), and the request traces around it (Tempo) - into
 // one Incident for a single workload.
 //
 // Everything here is pure: callers fetch deployments and traces, this package
