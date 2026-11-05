@@ -19,5 +19,5 @@ nodes:
       - containerPort: 30080
         hostPort: 8080
         protocol: TCP
-  - role: worker
+  # One worker keeps the cluster inside a 4 CPU / 8 GB Docker Desktop.
   - role: worker

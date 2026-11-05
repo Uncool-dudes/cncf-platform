@@ -61,7 +61,7 @@ The platform needs nothing from a workload except this contract.
 
 ## Bring-up
 
-Requirements: Docker Desktop with 8 CPU, 16 GB RAM and a 64 GB disk, plus nix with direnv.
+Requirements: Docker Desktop with 4 CPU, 8 GB RAM and a 64 GB disk, plus nix with direnv.
 
 ```
 direnv allow          # dev shell: kind, helm, cilium, istioctl, argocd, k6, just
