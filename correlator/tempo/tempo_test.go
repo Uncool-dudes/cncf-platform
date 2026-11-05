@@ -30,9 +30,11 @@ const (
 	   "serviceStats":{"checkout.shop":{"spanCount":1}}}]}`
 )
 
-func TestTraceQLMatchesBothServiceNames(t *testing.T) {
+// The bare SDK name is shared by every namespace running the same app, so
+// it only matches with the namespace attribute.
+func TestTraceQLScopesSDKServiceNameToNamespace(t *testing.T) {
 	q := TraceQL(shop, false)
-	if q != `{ resource.service.name = "checkout.shop" || resource.service.name = "checkout" }` {
+	if q != `{ resource.service.name = "checkout.shop" || (resource.service.name = "checkout" && resource.k8s.namespace.name = "shop") }` {
 		t.Fatalf("TraceQL = %s", q)
 	}
 	if f := TraceQL(shop, true); !strings.Contains(f, `span.http.status_code =~ "5.."`) || !strings.HasPrefix(f, "{ (resource") {

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/uncool-dudes/cncf-platform/correlator/incident"
@@ -22,11 +21,15 @@ type Client struct {
 	Limit   int
 }
 
-// ServiceNames lists the names a workload's spans may carry: Istio's sidecar
-// reports "<service>.<namespace>", an OTel SDK typically reports the bare
-// configured service name.
-func ServiceNames(w incident.Workload) []string {
-	return []string{w.Service + "." + w.Namespace, w.Service}
+// workloadMatch selects a workload's spans under both naming schemes in
+// the mesh: Istio's sidecar reports "<service>.<namespace>"; an OTel SDK
+// reports the bare configured name, which other namespaces may share, so
+// it is scoped by the k8s.namespace.name the collector's k8sattributes
+// processor adds.
+func workloadMatch(w incident.Workload) string {
+	return "resource.service.name = " + strconv.Quote(w.Service+"."+w.Namespace) +
+		" || (resource.service.name = " + strconv.Quote(w.Service) +
+		" && resource.k8s.namespace.name = " + strconv.Quote(w.Namespace) + ")"
 }
 
 // failed matches the error conventions present in the mesh: OTel span
@@ -36,16 +39,10 @@ const failed = `status = error || span.http.response.status_code >= 500 || span.
 
 // TraceQL builds the search for a workload's traces, optionally only failed ones.
 func TraceQL(w incident.Workload, onlyFailed bool) string {
-	names := ServiceNames(w)
-	match := make([]string, len(names))
-	for i, n := range names {
-		match[i] = "resource.service.name = " + strconv.Quote(n)
-	}
-	q := strings.Join(match, " || ")
 	if onlyFailed {
-		return "{ (" + q + ") && (" + failed + ") }"
+		return "{ (" + workloadMatch(w) + ") && (" + failed + ") }"
 	}
-	return "{ " + q + " }"
+	return "{ " + workloadMatch(w) + " }"
 }
 
 type searchResult struct {
