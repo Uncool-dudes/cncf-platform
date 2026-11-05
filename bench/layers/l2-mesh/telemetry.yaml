@@ -1,0 +1,11 @@
+# Overrides the mesh-wide 100% sampling (gitops/manifests/istio/mesh.yaml),
+# isolating the cost of the sidecars from the cost of tracing.
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: no-tracing
+spec:
+  tracing:
+    - providers:
+        - name: otel-tracing
+      randomSamplingPercentage: 0

@@ -1,0 +1,11 @@
+# Disable podinfo's own OTel export (traces and logs): without
+# --otel-service-name it installs a no-op provider. args/2 is that flag in
+# examples/podinfo/base; keep them in step.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      kind: Deployment
+    patch: |
+      - op: remove
+        path: /spec/template/spec/containers/0/args/2

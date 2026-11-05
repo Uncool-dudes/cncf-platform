@@ -1,0 +1,10 @@
+# Baseline: Cilium as CNI only. Not a platform workload, so no network
+# policy, admission policy, Falco workload rules, sidecar or tracing.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bench-l0-cni
+resources:
+  - namespace.yaml
+  - ../../../examples/podinfo/base
+components:
+  - ../components/sdk-off

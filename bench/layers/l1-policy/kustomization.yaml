@@ -1,0 +1,9 @@
+# + platform workload: Cilium baseline policy, Gatekeeper, Falco rules.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bench-l1-policy
+resources:
+  - namespace.yaml
+  - ../../../examples/podinfo/base
+components:
+  - ../components/sdk-off

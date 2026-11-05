@@ -1,0 +1,7 @@
+# + 100% tracing from Envoy and the podinfo SDK: the full platform.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bench-l3-full
+resources:
+  - namespace.yaml
+  - ../../../examples/podinfo/base

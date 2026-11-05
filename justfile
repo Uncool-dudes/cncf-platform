@@ -95,17 +95,18 @@ attack namespace workload container="":
     target=${target:-$(kubectl -n {{namespace}} get $pod -o jsonpath='{.spec.containers[0].name}')}
     kubectl -n {{namespace}} debug "$pod" --image=busybox:1.37 --target="$target" -it -- sh -c 'id; ps; exit 0'
 
-# k6 load from inside the mesh. TARGETS is a JSON file listing in-cluster
-# URLs; LABEL names the layer under test (baseline, mesh, mesh+falco, full).
-# Toggle layers with Git commits so Argo CD and the correlator record them.
-bench label targets:
+# One k6 run from inside the cluster. TARGETS is a JSON file of in-cluster
+# targets (see bench/health.js); LABEL names the run. INJECT gives k6 a
+# sidecar, required when the targets are meshed. For the layer matrix use
+# `just overhead`.
+bench label targets inject="true" duration="3m" rate="50":
     mkdir -p bench/results
     kubectl create namespace bench --dry-run=client -o yaml | kubectl apply -f - >/dev/null
     kubectl label namespace bench istio-injection=enabled --overwrite >/dev/null
     kubectl -n bench create configmap bench-targets --from-file=targets.json={{targets}} --dry-run=client -o yaml | kubectl apply -f - >/dev/null
     kubectl -n bench create configmap k6-script --from-file=bench/health.js --dry-run=client -o yaml | kubectl apply -f - >/dev/null
     kubectl -n bench delete job k6 --ignore-not-found >/dev/null
-    sed 's/__LABEL__/{{label}}/' bench/job.yaml | kubectl apply -f - >/dev/null
+    sed -e 's/__LABEL__/{{label}}/' -e 's/__INJECT__/{{inject}}/' -e 's/__DURATION__/{{duration}}/' -e 's/__RATE__/{{rate}}/' bench/job.yaml | kubectl apply -f - >/dev/null
     kubectl -n bench wait --for=condition=complete job/k6 --timeout=15m
     kubectl -n bench logs job/k6 -c k6 | sed -n '/^BENCH_SUMMARY /s/^BENCH_SUMMARY //p' > bench/results/{{label}}.json
     jq . bench/results/{{label}}.json
