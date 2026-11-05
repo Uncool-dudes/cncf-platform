@@ -1,0 +1,14 @@
+# http://eval.localhost:8080 through the platform's shared Gateway.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: frontend
+spec:
+  hosts: [eval.localhost]
+  gateways: [istio-ingress/platform]
+  http:
+    - route:
+        - destination:
+            host: frontend
+            port:
+              number: 9898

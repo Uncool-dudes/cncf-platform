@@ -118,3 +118,14 @@ down:
 # shuffled per repetition. Results in experiments/results/<run>-overhead.
 overhead *args:
     cd experiments && go run ./cmd/overhead {{args}}
+
+# Live correlator evaluation against the eval namespace pool. The eval
+# Applications pin HEAD, so it must be pushed. Results in
+# experiments/results/<run>-correlate.
+correlate *args:
+    git branch -r --contains HEAD | grep -q . || { echo "push HEAD first: Argo CD syncs the eval pool from it" >&2; exit 1; }
+    cd experiments && go run ./cmd/correlate -revision $(git rev-parse HEAD) {{args}}
+
+# Re-score a correlate run under the window grid (no cluster needed).
+replay run:
+    cd experiments && go run ./cmd/replay results/{{run}}/trials.jsonl > results/{{run}}/ablation.csv

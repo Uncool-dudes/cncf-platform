@@ -1,0 +1,10 @@
+# Template for the correlator evaluation's namespace pool. The harness
+# (experiments/cmd/correlate) creates one Argo CD Application per
+# namespace, overriding the namespace and the VirtualService host.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: eval
+resources:
+  - namespace.yaml
+  - ../../base
+  - virtualservice.yaml
