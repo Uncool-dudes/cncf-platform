@@ -57,23 +57,34 @@ spec:
               containerPort: 9090
             - name: loki
               containerPort: 3100
+          # One pod serves five backends; under load on a small node its
+          # health endpoint answers slowly. Probes tolerate that rather than
+          # restart it: a restart drops Tempo for minutes (search 503).
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: grafana
+            periodSeconds: 10
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /api/health
               port: grafana
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /api/health
               port: grafana
-            initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
           resources:
             requests:
               cpu: 300m
               memory: 1Gi
             limits:
-              memory: 1536Mi
+              memory: 2Gi
           volumeMounts:
             - name: data
               mountPath: /data
