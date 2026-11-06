@@ -128,6 +128,9 @@ type harness struct {
 	pool       []*evalNamespace
 	quiet      *evalNamespace
 	quietSince time.Time
+	// runTag makes markers unique across runs: the correlator keeps
+	// incidents from earlier runs, and a reused marker would match one.
+	runTag     string
 	planter    *planter
 	correlator correlatorClient
 }
@@ -157,7 +160,8 @@ func run(ctx context.Context, log *slog.Logger, results string, cfg config) erro
 	}
 	// A fresh annotation forces a sync even when the namespace survives
 	// from an earlier run.
-	setup := "setup-" + strconv.FormatInt(time.Now().Unix(), 10)
+	h.runTag = strconv.FormatInt(time.Now().Unix(), 10)
+	setup := "setup-" + h.runTag
 	newNS := func(name string) *evalNamespace {
 		return &evalNamespace{name: name, repoURL: string(repoURL), revision: cfg.Revision, wholeTrial: setup}
 	}
@@ -326,7 +330,7 @@ func (h *harness) delay(rng *rand.Rand) time.Duration {
 // prepare causes the scenario's syncs (only ever in own) and the attack,
 // returning the trial's ground truth.
 func (h *harness) prepare(ctx context.Context, p plan, own *evalNamespace, rng *rand.Rand) (trial.Record, error) {
-	r := trial.Record{ID: p.id, Scenario: p.scenario, Workload: "frontend", Marker: "trial-" + p.id}
+	r := trial.Record{ID: p.id, Scenario: p.scenario, Workload: "frontend", Marker: "trial-" + h.runTag + "-" + p.id}
 	var target *evalNamespace
 	switch p.scenario {
 	case trial.DeployThenAttack, trial.BackToBack:
