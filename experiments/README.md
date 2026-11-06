@@ -175,8 +175,13 @@ that every unit test had passed. None of them shows when each tool is evaluated 
     webhook would not appear in replay. Live outcomes measure that
     separately.
   - Recorded traces come from one Tempo search with a 2000 limit.
-- **Concurrency.** Trials overlap: a trial's incident is watched while the
-  next one runs, in another namespace.
+- **Concurrency.** One worker per pool namespace runs trials in parallel.
+  A worker syncs only its own namespace, and incidents are joined by
+  marker, so trials don't share ground truth. They do share the node, Falco
+  and the correlator, so heavy parallelism may raise `deliver_s`.
+- **Reused `eval-quiet`.** When `eval-quiet` is already healthy it is
+  reused unsynced, so it may be pinned to an earlier commit than the pool.
+  The overlay is the same.
 - **Overhead CPU interval.** The interval includes k6 pod start and stop at
   idle. That lowers every group's average equally.
 

@@ -128,7 +128,6 @@ type harness struct {
 	pool       []*evalNamespace
 	quiet      *evalNamespace
 	quietSince time.Time
-	next       int
 	planter    *planter
 	correlator correlatorClient
 }
@@ -168,18 +167,27 @@ func run(ctx context.Context, log *slog.Logger, results string, cfg config) erro
 	h.quiet = newNS("eval-quiet")
 
 	log.Info("deploying namespace pool")
-	names := []string{h.quiet.name}
-	for _, n := range append([]*evalNamespace{h.quiet}, h.pool...) {
-		dep, err := n.sync(ctx)
+	// eval-quiet is reused untouched when it is already healthy: syncing it
+	// would restart the lookback-long wait before quiet trials can run.
+	since, reused, err := lastSync(ctx, h.quiet.name)
+	if err != nil {
+		return err
+	}
+	if !reused {
+		dep, err := h.quiet.sync(ctx)
 		if err != nil {
 			return err
 		}
-		if n == h.quiet {
-			h.quietSince = dep.At
+		since = dep.At
+	}
+	h.quietSince = since
+	log.Info("eval-quiet ready", "reused", reused, "last_sync", since)
+	names := []string{h.quiet.name}
+	for _, n := range h.pool {
+		if _, err := n.sync(ctx); err != nil {
+			return err
 		}
-		if n != h.quiet {
-			names = append(names, n.name)
-		}
+		names = append(names, n.name)
 	}
 
 	interval, err := time.ParseDuration(cfg.Interval)
@@ -231,44 +239,69 @@ func needsQuiet(s trial.Scenario) bool {
 	return s == trial.AttackNoDeploy || s == trial.CrossNamespace
 }
 
-// runTrials runs plans in order, deferring quiet-namespace trials until the
-// namespace has been quiet for a full lookback. Each trial's incident is
-// watched in the background so the next trial starts at once.
+// runTrials runs one worker per pool namespace over a shared queue. A
+// worker's syncs touch only its own namespace, so trials in different
+// namespaces are independent; quiet-namespace trials only attack, so any
+// worker may run them once eval-quiet has aged past the lookback. Each
+// trial's incident is watched in the background so its worker moves on.
 func (h *harness) runTrials(ctx context.Context) []trial.Record {
 	queue := h.schedule()
 	var (
 		mu      sync.Mutex
 		records []trial.Record
-		wg      sync.WaitGroup
+		watches sync.WaitGroup
+		workers sync.WaitGroup
 	)
-	for len(queue) > 0 && ctx.Err() == nil {
-		p := queue[0]
-		queue = queue[1:]
-		if needsQuiet(p.scenario) && !h.quietReady() {
-			queue = append(queue, p)
-			if allNeedQuiet(queue) {
-				wait := time.Until(h.quietSince.Add(h.cfg.window.DeployLookback + time.Minute))
-				h.log.Info("waiting for eval-quiet to age past the lookback", "for", wait.Round(time.Second))
-				_ = sleep(ctx, wait)
+	// take returns the next runnable plan, or how long to wait when only
+	// quiet trials remain and eval-quiet is not ready yet.
+	take := func() (p plan, wait time.Duration, ok bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		for i, q := range queue {
+			if !needsQuiet(q.scenario) || h.quietReady() {
+				queue = append(queue[:i], queue[i+1:]...)
+				return q, 0, true
 			}
-			continue
 		}
-		r, err := h.prepare(ctx, p)
-		if err != nil {
-			h.log.Error("trial setup failed; skipping", "trial", p.id, "err", err)
-			continue
+		if len(queue) == 0 {
+			return plan{}, 0, false
 		}
-		h.log.Info("attacked", "trial", r.ID, "namespace", r.Namespace)
-		wg.Add(1)
+		return plan{}, time.Until(h.quietSince.Add(h.cfg.window.DeployLookback + time.Minute)), true
+	}
+	for i, own := range h.pool {
+		rng := rand.New(rand.NewPCG(h.cfg.Seed+uint64(i)+2, h.cfg.Seed+uint64(i)+2))
+		workers.Add(1)
 		go func() {
-			defer wg.Done()
-			h.observe(ctx, &r)
-			mu.Lock()
-			records = append(records, r)
-			mu.Unlock()
+			defer workers.Done()
+			for ctx.Err() == nil {
+				p, wait, ok := take()
+				if !ok {
+					return
+				}
+				if wait > 0 {
+					h.log.Info("waiting for eval-quiet to age past the lookback", "worker", own.name, "for", wait.Round(time.Second))
+					_ = sleep(ctx, wait)
+					continue
+				}
+				r, err := h.prepare(ctx, p, own, rng)
+				if err != nil {
+					h.log.Error("trial setup failed; skipping", "trial", p.id, "err", err)
+					continue
+				}
+				h.log.Info("attacked", "trial", r.ID, "namespace", r.Namespace)
+				watches.Add(1)
+				go func() {
+					defer watches.Done()
+					h.observe(ctx, &r)
+					mu.Lock()
+					records = append(records, r)
+					mu.Unlock()
+				}()
+			}
 		}()
 	}
-	wg.Wait()
+	workers.Wait()
+	watches.Wait()
 	return records
 }
 
@@ -285,25 +318,19 @@ func allNeedQuiet(queue []plan) bool {
 	return true
 }
 
-func (h *harness) nextPool() *evalNamespace {
-	n := h.pool[h.next%len(h.pool)]
-	h.next++
-	return n
-}
-
-func (h *harness) delay() time.Duration {
+func (h *harness) delay(rng *rand.Rand) time.Duration {
 	span := h.cfg.maxDelay - h.cfg.minDelay
-	return h.cfg.minDelay + time.Duration(h.rng.Int64N(int64(span)+1))
+	return h.cfg.minDelay + time.Duration(rng.Int64N(int64(span)+1))
 }
 
-// prepare causes the scenario's syncs and the attack, returning the trial's
-// ground truth.
-func (h *harness) prepare(ctx context.Context, p plan) (trial.Record, error) {
+// prepare causes the scenario's syncs (only ever in own) and the attack,
+// returning the trial's ground truth.
+func (h *harness) prepare(ctx context.Context, p plan, own *evalNamespace, rng *rand.Rand) (trial.Record, error) {
 	r := trial.Record{ID: p.id, Scenario: p.scenario, Workload: "frontend", Marker: "trial-" + p.id}
 	var target *evalNamespace
 	switch p.scenario {
 	case trial.DeployThenAttack, trial.BackToBack:
-		target = h.nextPool()
+		target = own
 		if p.scenario == trial.BackToBack {
 			target.wholeTrial = p.id + "-first"
 			if _, err := target.sync(ctx); err != nil {
@@ -320,14 +347,14 @@ func (h *harness) prepare(ctx context.Context, p plan) (trial.Record, error) {
 		}
 		r.Cause = &cause
 	case trial.CrossNamespace:
-		other := h.nextPool()
+		other := own
 		other.wholeTrial = p.id
 		if _, err := other.sync(ctx); err != nil {
 			return r, err
 		}
 		target = h.quiet
 	case trial.SiblingWorkload:
-		target = h.nextPool()
+		target = own
 		target.backendTrial = p.id
 		if _, err := target.sync(ctx); err != nil {
 			return r, err
@@ -337,7 +364,7 @@ func (h *harness) prepare(ctx context.Context, p plan) (trial.Record, error) {
 	}
 	r.Namespace = target.name
 	if p.scenario != trial.AttackNoDeploy {
-		if err := sleep(ctx, h.delay()); err != nil {
+		if err := sleep(ctx, h.delay(rng)); err != nil {
 			return r, err
 		}
 	}

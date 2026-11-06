@@ -139,3 +139,21 @@ func attack(ctx context.Context, namespace, workload, marker string) (time.Time,
 		"sh", "-c", "true "+marker)
 	return at, err
 }
+
+// lastSync returns when an existing, healthy eval Application last synced.
+// ok is false when it does not exist or is not Synced and Healthy.
+func lastSync(ctx context.Context, name string) (at time.Time, ok bool, err error) {
+	raw, err := kube.Kubectl(ctx, nil, "-n", "argocd", "get", "application", name, "-o", "json", "--ignore-not-found")
+	if err != nil || len(raw) == 0 {
+		return time.Time{}, false, err
+	}
+	var app appStatus
+	if err := json.Unmarshal(raw, &app); err != nil {
+		return time.Time{}, false, err
+	}
+	st := app.Status
+	if st.Sync.Status != "Synced" || st.Health.Status != "Healthy" || st.OperationState.FinishedAt.IsZero() {
+		return time.Time{}, false, nil
+	}
+	return st.OperationState.FinishedAt, true, nil
+}
