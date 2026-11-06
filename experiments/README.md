@@ -132,7 +132,7 @@ DaemonSet is pinned to no node; on restores it from Git.
 
 ## Integration defects found by running it
 
-The first live bring-up and the harness smoke run found four defects
+The first live bring-up and the harness smoke run found five defects
 that every unit test had passed. None of them shows when each tool is evaluated alone.
 
 1. **Gatekeeper allowed-repos versus the Istio hub.** The constraint
@@ -152,6 +152,12 @@ that every unit test had passed. None of them shows when each tool is evaluated 
    the same app shares. Incidents then listed other namespaces' failed
    requests and none of their own. The smoke run of this harness found it:
    two namespaces reported identical trace IDs.
+5. **Clock domains after host suspend.** Falco stamps events from boot
+   time plus a monotonic clock, which does not advance while the Docker
+   VM is suspended. After the laptop slept for 5 h, alerts were stamped
+   5 h in the past while Argo CD's sync times were not. Every alert then
+   predated its causing sync and was attributed to an older one. Restart
+   Falco after any host sleep, and run experiments under `caffeinate`.
 
 ## Threats to validity
 
