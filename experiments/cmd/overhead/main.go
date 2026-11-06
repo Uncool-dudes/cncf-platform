@@ -281,11 +281,19 @@ func setFalco(ctx context.Context, repo string, on bool) error {
 		if _, err := kube.Kubectl(ctx, nil, "apply", "-f", filepath.Join(repo, "gitops/root.yaml")); err != nil {
 			return err
 		}
-		if _, err := kube.Kubectl(ctx, nil, "-n", "falco", "patch", "daemonset", "falco", "--type=json",
-			"-p", `[{"op":"remove","path":"/spec/template/spec/nodeSelector/platform.cncf~1bench-no-falco"}]`); err != nil && !strings.Contains(err.Error(), "nonexistent") {
+		// Argo CD may already have removed the pin by the time this runs.
+		pin, err := kube.Kubectl(ctx, nil, "-n", "falco", "get", "daemonset", "falco",
+			"-o", `jsonpath={.spec.template.spec.nodeSelector.platform\.cncf/bench-no-falco}`)
+		if err != nil {
 			return err
 		}
-		_, err := kube.Kubectl(ctx, nil, "-n", "falco", "rollout", "status", "daemonset/falco", "--timeout=5m")
+		if len(pin) > 0 {
+			if _, err := kube.Kubectl(ctx, nil, "-n", "falco", "patch", "daemonset", "falco", "--type=json",
+				"-p", `[{"op":"remove","path":"/spec/template/spec/nodeSelector/platform.cncf~1bench-no-falco"}]`); err != nil {
+				return err
+			}
+		}
+		_, err = kube.Kubectl(ctx, nil, "-n", "falco", "rollout", "status", "daemonset/falco", "--timeout=5m")
 		return err
 	}
 	for _, app := range []string{"root", "falco"} {
