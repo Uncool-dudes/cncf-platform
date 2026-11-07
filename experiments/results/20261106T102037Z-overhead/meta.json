@@ -1,0 +1,18 @@
+{
+  "argocd_apps": "argocd                 Synced   Healthy\ncorrelator             Synced   Healthy\nfalco                  Synced   Healthy\ngatekeeper             Synced   Healthy\nistio-base             Synced   Healthy\nistio-cni              Synced   Healthy\nistio-ingress          Synced   Healthy\nistiod                 Synced   Healthy\nkube-state-metrics     Synced   Healthy\nmail                   Synced   Healthy\nmesh-config            Synced   Healthy\nnetwork-policy         Synced   Healthy\nobservability-config   Synced   Healthy\notel-collector         Synced   Healthy\npodinfo                Synced   Healthy\npolicy-config          Synced   Healthy\npolicy-constraints     Synced   Healthy\npolicy-templates       Synced   Healthy\nroot                   Synced   Healthy",
+  "docker": "4 cpu, 8320233472 bytes, Docker Desktop, kernel 7.0.14-linuxkit",
+  "git_commit": "b48324c13becbc593bf0d0a22c6079020156d815",
+  "git_dirty": true,
+  "host_machine": "Darwin 25.6.0 arm64",
+  "kubectl": "{\n  \"clientVersion\": {\n    \"major\": \"1\",\n    \"minor\": \"37\",\n    \"gitVersion\": \"v1.37.2\",\n    \"gitCommit\": \"c50e5395f1ae2d4a2c05f28fdcc38c0916cc1a32\",\n    \"gitTreeState\": \"archive\",\n    \"buildDate\": \"1980-01-01T00:00:00Z\",\n    \"goVersion\": \"go1.26.10\",\n    \"compiler\": \"gc\",\n    \"platform\": \"darwin/arm64\"\n  },\n  \"kustomizeVersion\": \"v5.8.1\",\n  \"serverVersion\": {\n    \"major\": \"1\",\n    \"minor\": \"37\",\n    \"emulationMajor\": \"1\",\n    \"emulationMinor\": \"37\",\n    \"minCompatibilityMajor\": \"1\",\n    \"minCompatibilityMinor\": \"36\",\n    \"gitVersion\": \"v1.37.0\",\n    \"gitCommit\": \"f54c212e3a2f75d674b717a9b29052b20b60aefc\",\n    \"gitTreeState\": \"clean\",\n    \"buildDate\": \"2026-08-26T10:44:25Z\",\n    \"goVersion\": \"go1.26.6\",\n    \"compiler\": \"gc\",\n    \"platform\": \"linux/arm64\"\n  }\n}",
+  "nodes": "platform-control-plane   Ready   control-plane   14h   v1.37.0   172.19.0.3   \u003cnone\u003e   Debian GNU/Linux 13 (trixie)   7.0.14-linuxkit (arm64)   containerd://2.3.4\nplatform-worker          Ready   \u003cnone\u003e          14h   v1.37.0   172.19.0.2   \u003cnone\u003e   Debian GNU/Linux 13 (trixie)   7.0.14-linuxkit (arm64)   containerd://2.3.4",
+  "params": {
+    "reps": 2,
+    "duration": "1m",
+    "warmup": "15s",
+    "rate": 50,
+    "falco": "on,off",
+    "seed": 1793960437127705000
+  },
+  "started_at": "2026-11-06T10:20:37.129091Z"
+}
