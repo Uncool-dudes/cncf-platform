@@ -8,7 +8,9 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 cluster := env("KIND_CLUSTER", "platform")
-arch    := `docker info --format '{{.Architecture}}' 2>/dev/null | sed 's/aarch64/arm64/;s/x86_64/amd64/'`
+# Host CPU, which is also the Docker Desktop VM's. Asking Docker instead made
+# every recipe, even `just ui`, fail whenever Docker was not running.
+arch    := if arch() == "aarch64" { "arm64" } else { "amd64" }
 
 # Full bring-up, in dependency order.
 up: cluster cilium correlator-image grafana-secret argocd
